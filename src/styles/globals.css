@@ -1,0 +1,13 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+	.bg-colors-primary {
+		@apply bg-colors-primary-200 dark:bg-colors-primary-100;
+	}
+
+	.bg-colors-secondary {
+		@apply bg-colors-secondary-200 dark:bg-colors-secondary-100;
+	}
+}
