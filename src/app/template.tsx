@@ -6,7 +6,6 @@ import { ToastAction } from "@radix-ui/react-toast";
 import axios from "axios";
 import { JetBrains_Mono } from "next/font/google";
 import { createContext, Dispatch, SetStateAction, useEffect, useState } from "react";
-import { IconArrowLeft, IconBrandTabler, IconSettings, IconUserBolt } from "@tabler/icons-react";
 
 export const MenuState = createContext<{ isOpen: boolean; setIsOpen: Dispatch<SetStateAction<boolean>> }>({
 	isOpen: false,
