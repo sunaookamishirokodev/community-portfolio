@@ -7,13 +7,11 @@ import { ToastAction } from "@/components/ui/toast";
 import { useToast } from "@/components/ui/use-toast";
 import { getDefaultAvatarName, getUserMedia } from "@/functions/user";
 import axios from "axios";
-import InfiniteScroll from "react-infinite-scroll-component";
 import { useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { io, Socket } from "socket.io-client";
 
 export default function DiscussionPage({ params: { channel } }: { params: { channel: string } }) {
 	const [socket, setSocket] = useState<Socket | null>(null);
-	const [newMessagesCount, setNewMessagesCount] = useState<number>(-1);
 	const [messages, setMessages] = useState<DiscussionMessage[]>([]);
 	const [message, setMessage] = useState<string>("");
 	const { user } = useContext(UserData);
@@ -30,14 +28,17 @@ export default function DiscussionPage({ params: { channel } }: { params: { chan
 			if (!cb) setError("Invalid channel");
 			setCurrentChannel(cb);
 		});
+		server.on("connect", () => {
+			console.log("Socket connected");
+		});
+		server.on("disconnect", () => {
+			console.log("Socket disconnected");
+		});
 		setSocket(server);
 
 		axios
 			.get(`${process.env.NEXT_PUBLIC_API_BASE_URL}/discussion/message/${channel}`, { withCredentials: true })
-			.then((res) => {
-				setMessages(res.data.data);
-				setNewMessagesCount(0);
-			})
+			.then((res) => setMessages(res.data.data))
 			.catch((err) => setError(err.response.data.msg));
 
 		return () => {
@@ -48,24 +49,33 @@ export default function DiscussionPage({ params: { channel } }: { params: { chan
 	useEffect(() => {
 		socket?.on("receiveMessage", (msg) => {
 			console.log(msg);
-			setMessages([msg, ...messages]);
+			setMessages([...messages, msg]);
 		});
 
 		socket?.on("connect_error", (err) => console.log(err.message));
 	}, [socket, messages]);
 
-	// useEffect(() => {
-	// 	if (!ulRef.current) return;
-	// 	if (ulRef.current.scrollTop === 0) {
-	// 		axios
-	// 			.get(
-	// 				`${process.env.NEXT_PUBLIC_API_BASE_URL}/discussion/message/${channel}?position=${messages.length}`,
-	// 				{ withCredentials: true },
-	// 			)
-	// 			.then((res) => setMessages([res.data.data, ...messages]))
-	// 			.catch((err) => setError(err.response.data.msg));
-	// 	}
-	// }, [channel, messages.length]);
+	useEffect(() => {
+		const scroll = () => {
+			console.log("Scroll", ulRef.current!.scrollTop, messages);
+			if (ulRef.current!.scrollTop === 0) {
+				axios
+					.get(
+						`${process.env.NEXT_PUBLIC_API_BASE_URL}/discussion/message/${channel}?position=${messages.length}`,
+						{ withCredentials: true },
+					)
+					.then((res) => {
+						if (res.data.data.length === 0) {
+							return console.log("end");
+						}
+						console.log([res.data.data, ...messages].length);
+						setMessages([res.data.data, ...messages]);
+					})
+					.catch((err) => setError(err.response.data.msg));
+			}
+		};
+		ulRef.current?.addEventListener("scroll", scroll);
+	}, [channel, messages]);
 
 	useEffect(() => {
 		if (!inputRef.current || !buttonRef.current) return;
@@ -107,59 +117,32 @@ export default function DiscussionPage({ params: { channel } }: { params: { chan
 	}, [error, toast]);
 
 	useLayoutEffect(() => {
-		if (ulRef.current) {
+		if (ulRef.current && messages.at(-1)?.member_id === user?.id) {
 			ulRef.current.scrollTop = ulRef.current.scrollHeight;
 		}
-	}, [newMessagesCount]);
+	}, [messages, user?.id]);
 
 	return (
 		<div className="flex h-full w-full flex-1 flex-col gap-2 rounded-tl-2xl border border-neutral-200 bg-white p-2 md:p-3 dark:border-neutral-700 dark:bg-neutral-900">
-			<ul ref={ulRef} className="flex flex-1 flex-col gap-2 overflow-y-scroll px-2" id="scrollableDiv">
-				<InfiniteScroll
-					dataLength={messages.length}
-					endMessage={
-						<p style={{ textAlign: "center" }}>
-							<b>Yay! You have seen it all</b>
-						</p>
-					}
-					style={{ display: "flex", flexDirection: "column-reverse" }}
-					scrollThreshold={"100px"}
-					// inverse={true}
-					hasMore={true}
-					loader={<h4>Loading...</h4>}
-					next={() => {
-						axios
-							.get(
-								`${process.env.NEXT_PUBLIC_API_BASE_URL}/discussion/message/${channel}?position=${messages.length}`,
-								{ withCredentials: true },
-							)
-							.then((res) => {
-								console.log(res.data);
-								setMessages([...messages, res.data.data]);
-							})
-							.catch((err) => setError(err.response.data.msg));
-					}}
-					scrollableTarget="scrollableDiv"
-				>
-					{messages.map((msg, index) => {
-						return (
-							<li
-								key={index}
-								className={`flex items-center gap-2 ${msg.member_id === user?.id ? "ml-auto flex-row-reverse" : "mr-auto"}`}
+			<ul ref={ulRef} className="flex flex-1 flex-col gap-2 overflow-y-scroll px-2">
+				{messages.map((msg, index) => {
+					return (
+						<li
+							key={index}
+							className={`flex items-center gap-2 ${msg.member_id === user?.id ? "ml-auto flex-row-reverse" : "mr-auto"}`}
+						>
+							<Avatar>
+								<AvatarImage src={getUserMedia(user?.avatar!)} alt={user?.display_name} />
+								<AvatarFallback>{getDefaultAvatarName(user?.display_name!)}</AvatarFallback>
+							</Avatar>
+							<span
+								className={`rounded-xl bg-primary px-3 py-1 ${msg.member_id === user?.id ? "rounded-tr-none" : "rounded-tl-none"}`}
 							>
-								<Avatar>
-									<AvatarImage src={getUserMedia(user?.avatar!)} alt={user?.display_name} />
-									<AvatarFallback>{getDefaultAvatarName(user?.display_name!)}</AvatarFallback>
-								</Avatar>
-								<span
-									className={`rounded-xl bg-primary px-3 py-1 ${msg.member_id === user?.id ? "rounded-tr-none" : "rounded-tl-none"}`}
-								>
-									{msg.content}
-								</span>
-							</li>
-						);
-					})}
-				</InfiniteScroll>
+								{msg.content}
+							</span>
+						</li>
+					);
+				})}
 			</ul>
 			<div className="flex gap-3">
 				<Textarea
@@ -187,8 +170,7 @@ export default function DiscussionPage({ params: { channel } }: { params: { chan
 								if (!inputRef.current || !ulRef.current) return;
 								setMessage("");
 								inputRef.current.value = "";
-								setMessages([data, ...messages]);
-								setNewMessagesCount(newMessagesCount + 1);
+								setMessages([...messages, data]);
 							}
 						});
 					}}
